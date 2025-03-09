@@ -1,0 +1,100 @@
+version: '3.8'
+
+services:
+  app:
+    volumes:
+      - ../:/var/www/html
+      - /home/${COMPOSE_PROJECT_NAME}-shu/${COMPOSE_PROJECT_NAME}.docker.genesit-ltd.com/shared:/home/${COMPOSE_PROJECT_NAME}-shu/${COMPOSE_PROJECT_NAME}.docker.genesit-ltd.com/shared
+    expose:
+      - "9000"
+    restart: unless-stopped
+    networks:
+      - internal
+      - backend-net
+    deploy:
+      resources:
+        limits:
+          cpus: '3'
+          memory: 2.5g 
+  
+  web:
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik_net"
+      # Conf middlewares
+      - "traefik.http.middlewares.auth-${COMPOSE_PROJECT_NAME}.basicauth.users=${COMPOSE_PROJECT_NAME}:$$apr1$$ytUC9EcZ$$u3b/D2cTP7ithPcdeIYRX0"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=true"
+      - "traefik.http.middlewares.${COMPOSE_PROJECT_NAME}Header.headers.framedeny=true"
+      - "traefik.http.middlewares.${COMPOSE_PROJECT_NAME}Header.headers.browserxssfilter=true"
+      - "traefik.http.middlewares.${COMPOSE_PROJECT_NAME}Header.headers.customFrameOptionsValue=sameorigin"
+      # Conf router https
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-websecure.rule=Host(`${HOST}`)"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-websecure.priority=99"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-websecure.entrypoints=websecure"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-websecure.tls=true"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-websecure.tls.certresolver=default"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-websecure.tls.options=intermediate@file"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-websecure.middlewares=auth-${COMPOSE_PROJECT_NAME},${COMPOSE_PROJECT_NAME}Header,compress@file"
+      # Conf router http
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-web.rule=Host(`${HOST}`)"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-web.priority=98"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-web.entrypoints=web"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-web.middlewares=auth-${COMPOSE_PROJECT_NAME},redirect-to-https,${COMPOSE_PROJECT_NAME}Header,compress@file"
+    
+    volumes:
+      - /home/${COMPOSE_PROJECT_NAME}-shu/${COMPOSE_PROJECT_NAME}.docker.genesit-ltd.com/shared:/home/${COMPOSE_PROJECT_NAME}-shu/${COMPOSE_PROJECT_NAME}.docker.genesit-ltd.com/shared
+    restart: unless-stopped
+    expose:
+      - "80"
+      - "443"
+  
+    networks:
+      - internal
+      - traefik_net
+    deploy:
+      resources:
+        limits:
+          cpus: '3'
+          memory: 2.5g 
+
+    links:
+      - app
+      - db
+
+  db:
+    volumes:
+      - db_data:/var/lib/mysql
+      - /home/${COMPOSE_PROJECT_NAME}-shu/${COMPOSE_PROJECT_NAME}.docker.genesit-ltd.com/shared:/home/${COMPOSE_PROJECT_NAME}-shu/${COMPOSE_PROJECT_NAME}.docker.genesit-ltd.com/shared
+    expose:
+      - "3306"
+    restart: unless-stopped
+    networks:
+      internal: null
+      phpmyadmin_pma-net: null
+        
+    deploy:
+      resources:
+        limits:
+          cpus: '3'
+          memory: 2.5g 
+
+networks:   
+  internal:
+    name: ${COMPOSE_PROJECT_NAME}_internal
+    internal: true         
+          
+  traefik_net:
+      external:
+          name: traefik_net
+  backend-net:
+      external:
+          name: backend-net
+
+  phpmyadmin_pma-net:
+      external: 
+          name: phpmyadmin_pma-net
+
+volumes:
+  db_data:
+    name: ${COMPOSE_PROJECT_NAME}_db_data
