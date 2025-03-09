@@ -1,0 +1,159 @@
+version: '3.8'
+
+services:
+  app:
+    expose:
+      - "9000"
+    deploy:
+      resources:
+        limits:
+          cpus: '3'
+          memory: 2.5g 
+    networks:
+      - backend-net
+      - internal
+
+  db:
+    expose:
+      - "3306"
+    deploy:
+      resources:
+        limits:
+          cpus: '3'
+          memory: 2.5g 
+    networks:
+      - internal
+
+  web:
+    networks:
+      - internal
+    deploy:
+      resources:
+        limits:
+          cpus: '3'
+          memory: 2.5g  
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik_net"
+      # Conf middlewares
+      - "traefik.http.middlewares.auth-${COMPOSE_PROJECT_NAME}.basicauth.users=${COMPOSE_PROJECT_NAME}:$$apr1$$ytUC9EcZ$$u3b/D2cTP7ithPcdeIYRX0"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=true"
+      - "traefik.http.middlewares.${COMPOSE_PROJECT_NAME}Header.headers.framedeny=true"
+      - "traefik.http.middlewares.${COMPOSE_PROJECT_NAME}Header.headers.browserxssfilter=true"
+      - "traefik.http.middlewares.${COMPOSE_PROJECT_NAME}Header.headers.customFrameOptionsValue=sameorigin"
+      # Conf router https
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-websecure.rule=Host(`${HOST}`)"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-websecure.priority=99"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-websecure.entrypoints=websecure"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-websecure.tls=true"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-websecure.tls.certresolver=default"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-websecure.tls.options=intermediate@file"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-websecure.middlewares=${COMPOSE_PROJECT_NAME}Header,compress@file"
+      # Conf router http
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-web.rule=Host(`${HOST}`)"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-web.priority=98"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-web.entrypoints=web"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-web.middlewares=redirect-to-https,${COMPOSE_PROJECT_NAME}Header,compress@file"
+
+  mailpit:
+    image: axllent/mailpit:v1.20.5
+    container_name: ${COMPOSE_PROJECT_NAME}_mailpit
+    restart: unless-stopped
+    volumes:
+      - mp_data:/data
+    environment:
+      MP_MAX_MESSAGES: 5000
+      MP_UI_AUTH: "mailpit:preview"
+      MP_DATABASE: /data/mailpit.db
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+    #1026 & 8026 Host port is already in use for engage_mailpit on server
+    #1027 & 8027 Host port is already in use for unis_mailpit on server
+    #1028 & 8028 Host port is already in use for infoafrica_mailpit on server
+    #ports:
+      #- 1029:1025
+      #- 8029:8025 ## To be use from external accèes to mailpit
+    expose:
+      - 8025
+      - 1025
+    networks:
+      - traefik_net
+      - internal
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik_net"
+      - 'traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https'
+      - 'traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=true'
+      - "traefik.http.services.${MAILPIT_PROJECT_NAME}.loadbalancer.server.port=8025"
+      ### conf router HTTPS
+      - 'traefik.http.routers.${MAILPIT_PROJECT_NAME}-websecure.rule=Host(`${MP_HOST}`)'
+      - 'traefik.http.routers.${MAILPIT_PROJECT_NAME}-websecure.entrypoints=websecure'
+      - 'traefik.http.routers.${MAILPIT_PROJECT_NAME}-websecure.tls=true'
+      - 'traefik.http.routers.${MAILPIT_PROJECT_NAME}-websecure.tls.certresolver=default'
+      - 'traefik.http.routers.${MAILPIT_PROJECT_NAME}-websecure.tls.options=intermediate@file'
+      - 'traefik.http.routers.${MAILPIT_PROJECT_NAME}-websecure.middlewares=redirect-to-https'
+      - 'traefik.http.routers.${MAILPIT_PROJECT_NAME}-websecure.service=${MAILPIT_PROJECT_NAME}'
+      ### conf router HTTP
+      - "traefik.http.routers.${MAILPIT_PROJECT_NAME}-web.rule=Host(`${MP_HOST}`)"
+      - "traefik.http.routers.${MAILPIT_PROJECT_NAME}-web.priority=98"
+      - "traefik.http.routers.${MAILPIT_PROJECT_NAME}-web.entrypoints=web"
+      - "traefik.http.routers.${MAILPIT_PROJECT_NAME}-web.middlewares=redirect-to-https,compress@file"
+
+
+  composer:
+    container_name: ${COMPOSE_PROJECT_NAME}_composer
+    image: fulldigits/composer:8.3-alpine
+    volumes:
+      - ../:/app
+      - composer-caches:/var/cache
+      - ${KEY_PATH}:/root/.ssh/id_ed25519
+
+    deploy:
+      resources:
+        limits:
+          cpus: '3'
+          memory: 2.5g 
+    command: >
+      /bin/sh -c "echo '--- Install main dependencies ---'
+      && chmod 700 /root/.ssh/id_ed25519
+      && touch /root/.ssh/known_hosts
+      && ssh-keyscan bitbucket.org >> /root/.ssh/known_hosts
+      && composer install -vvv && tail -f /dev/null"
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: ${COMPOSE_PROJECT_NAME}_phpmyadmin
+    hostname: ${COMPOSE_PROJECT_NAME}_phpmyadmin
+    ports:
+      - "8080:80" 
+    environment:
+      PMA_HOST: db
+      PMA_PORT: 3306
+      PHP_INI_UPLOAD_MAX_FILESIZE: 64M
+      PHP_INI_POST_MAX_SIZE: 64M
+      UPLOAD_LIMIT: 64M
+    depends_on:
+      - db
+    networks:
+      - internal
+      - traefik_net
+     
+
+volumes:
+    data:
+      name: ${COMPOSE_PROJECT_NAME}-database
+
+    mp_data:
+      name: ${COMPOSE_PROJECT_NAME}_mp_data
+
+    composer-caches:
+      name: ${COMPOSE_PROJECT_NAME}-composer-caches
+
+networks:
+  internal:
+      name: ${COMPOSE_PROJECT_NAME}_internal
+      internal: true
+  traefik_net:
+      external:
+          name: traefik_net
