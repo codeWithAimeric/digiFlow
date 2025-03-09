@@ -25,3 +25,11 @@
 ###< symfony/asset-mapper ###
 
 .env
+docker/etc/apache/000-default.conf
+docker/etc/apache/default-ssl.conf
+docker/etc/key/.gitkeep
+docker/etc/php/xdebug.ini
+docker/etc/php/www.conf
+docker/etc/key/id_ed25519
+docker/etc/apache/httpd-custom.conf
+docker/etc/php/php.ini
