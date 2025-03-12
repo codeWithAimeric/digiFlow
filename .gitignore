@@ -33,3 +33,7 @@ docker/etc/php/www.conf
 docker/etc/key/id_ed25519
 docker/etc/apache/httpd-custom.conf
 docker/etc/php/php.ini
+
+###> phpstan/phpstan ###
+phpstan.neon
+###< phpstan/phpstan ###
