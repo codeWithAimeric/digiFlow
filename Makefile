@@ -30,7 +30,7 @@ down:
 	@docker-compose --env-file .env.local -f docker/docker-compose.yml -f docker/docker-compose.override.yml down --remove-orphans
 
 composer-bash:
-	@docker-compose --env-file .env -f docker/docker-compose.yml -f docker/docker-compose.override.yml run --rm composer sh
+	@docker-compose --env-file .env.local -f docker/docker-compose.yml -f docker/docker-compose.override.yml run --rm composer sh
 
 composer-up:
 	@docker-compose --env-file .env -f docker/docker-compose.yml -f docker/docker-compose.override.yml run --rm composer update -vvv
